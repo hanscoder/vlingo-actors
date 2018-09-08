@@ -13,6 +13,9 @@ import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+
 public class BasicCompletesTest {
   private Integer andThenValue;
 
@@ -38,7 +41,7 @@ public class BasicCompletesTest {
   public void testCompletesAfterConsumer() {
     final Completes<Integer> completes = new BasicCompletes<>(0);
     
-    completes.after((value) -> andThenValue = value);
+    completes.after((Consumer<Integer>) (value) -> andThenValue = value);
     
     completes.with(5);
     
@@ -51,7 +54,7 @@ public class BasicCompletesTest {
 
     completes
       .after(() -> completes.outcome() * 2)
-      .andThen((value) -> andThenValue = value);
+      .andThen((Consumer<Integer>) (value) -> andThenValue = value);
     
     completes.with(5);
     
@@ -66,11 +69,26 @@ public class BasicCompletesTest {
 
     completes
       .after(() -> completes.outcome() * 2)
-      .andThen((value) -> sender.send(value));
+      .andThen((Consumer<Integer>) (value) -> sender.send(value));
 
     completes.with(5);
 
     assertEquals(new Integer(10), andThenValue);
+  }
+
+  @Test
+  public void testTransformsBetweenCompletes() {
+    final Completes<Integer> completes = new BasicCompletes<>(0);
+
+    AtomicReference<String> transformedValue = new AtomicReference<>();
+
+    completes
+      .after(value -> "Value is " + value)
+      .after(transformedValue::set);
+
+    completes.with(5);
+
+    assertEquals("Value is 5", transformedValue.get());
   }
 
   @Test
@@ -79,7 +97,7 @@ public class BasicCompletesTest {
     
     completes
       .after(() -> completes.outcome() * 2, 1000)
-      .andThen((value) -> andThenValue = value);
+      .andThen((Consumer<Integer>) (value) -> andThenValue = value);
     
     completes.with(5);
     
@@ -92,7 +110,7 @@ public class BasicCompletesTest {
     
     completes
       .after(() -> completes.outcome() * 2, 1, 0)
-      .andThen((value) -> andThenValue = value);
+      .andThen((Consumer<Integer>) (value) -> andThenValue = value);
     
     Thread.sleep(100);
     
@@ -135,7 +153,7 @@ public class BasicCompletesTest {
     assertEquals(new Integer(5), completed);
   }
 
-  private class Sender {
+  private class Sender<T> {
     private void send(final Integer value) {
       andThenValue = value;
     }

@@ -8,6 +8,7 @@
 package io.vlingo.actors;
 
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public interface Completes<T> {
@@ -33,7 +34,11 @@ public interface Completes<T> {
   Completes<T> after(final Consumer<T> consumer);
   Completes<T> after(final Consumer<T> consumer, final long timeout);
   Completes<T> after(final Consumer<T> consumer, final long timeout, final T timedOutValue);
+  <R> Completes<R> after(final Function<T,R> function);
+  <R> Completes<R> after(final Function<T,R> function, final long timeout);
+  <R> Completes<R> after(final Function<T,R> function, final long timeout, final R timeOutValue);
   Completes<T> andThen(final Consumer<T> consumer);
+  <R> Completes<R> andThen(final Function<T,R> consumer);
   Completes<T> atLast(final Consumer<T> consumer);
   Completes<T> atLast(final Supplier<T> supplier);
   T await();

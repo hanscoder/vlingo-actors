@@ -12,20 +12,26 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class BasicCompletes<T> implements Completes<T>, Scheduled {
-  private final AtomicReference<Outcome> outcome;
-  private final State state;
+  private final AtomicReference<Outcome<T>> outcome;
+  private final State<T> state;
 
   public BasicCompletes(final Scheduler scheduler) {
     this.outcome = new AtomicReference<>(null);
-    this.state = new State(scheduler);
+    this.state = new State<>(scheduler);
   }
 
   public BasicCompletes(final T outcome) {
-    this.outcome = new AtomicReference<>(new Outcome(outcome));
-    this.state = new State();
+    this.outcome = new AtomicReference<>(new Outcome<>(outcome));
+    this.state = new State<>();
+  }
+
+  private BasicCompletes(final T outcome, final BasicCompletes<T>.State<T> state) {
+    this.outcome = new AtomicReference<>(new Outcome<>(outcome));
+    this.state = state;
   }
 
   @Override
@@ -77,6 +83,36 @@ public class BasicCompletes<T> implements Completes<T>, Scheduled {
   }
 
   @Override
+  public <R> Completes<R> after(Function<T, R> function) {
+    return after(function, -1L, null);
+  }
+
+  @Override
+  public <R> Completes<R> after(Function<T, R> function, long timeout) {
+    return after(function, timeout, null);
+  }
+
+  @Override
+  public <R> Completes<R> after(Function<T, R> function, long timeout, R timeOutValue) {
+    final BasicCompletes<R>.State<R> newState = new BasicCompletes<R>.State<R>(null);
+    newState.actions = state.actions;
+    newState.cancellable = state.cancellable;
+    newState.completed.set(state.completed.get());
+    newState.executingActions.set(state.executingActions.get());
+    newState.scheduler = state.scheduler;
+    newState.timedOutValue = timeOutValue;
+    newState.actions.add(function);
+
+    BasicCompletes<R> newCompletes = new BasicCompletes<>(null, newState);
+    if (newState.isCompleted() && newCompletes.outcome.get() != null) {
+      newCompletes.executeActions();
+    } else {
+      newCompletes.startTimer(timeout);
+    }
+    return newCompletes;
+  }
+
+  @Override
   public Completes<T> andThen(final Consumer<T> consumer) {
     state.actions.add(consumer);
     if (state.isCompleted() && outcome.get() != null) {
@@ -86,11 +122,16 @@ public class BasicCompletes<T> implements Completes<T>, Scheduled {
   }
 
   @Override
+  public <R> Completes<R> andThen(Function<T, R> consumer) {
+    return null;
+  }
+
+  @Override
   public Completes<T> atLast(final Supplier<T> supplier) {
     state.actions.add(supplier);
     if (state.isCompleted() && outcome.get() != null) {
       executeActions();
-      outcome.set(new Outcome(supplier.get()));
+      outcome.set(new Outcome<>(supplier.get()));
     }
     return this;
   }
@@ -162,12 +203,12 @@ public class BasicCompletes<T> implements Completes<T>, Scheduled {
 
   private void completedWith(final boolean timedOut, final T outcome) {
     if (state.completed.compareAndSet(false, true)) {
-      this.outcome.set(new Outcome(outcome));
+      this.outcome.set(new Outcome<>(outcome));
 
       state.cancelTimer();
 
       if (timedOut) {
-        this.outcome.set(new Outcome(state.timedOutValue));
+        this.outcome.set(new Outcome<>(state.timedOutValue));
       }
 
       executeActions();
@@ -184,6 +225,8 @@ public class BasicCompletes<T> implements Completes<T>, Scheduled {
         this.outcome.set(new Outcome(((Supplier<T>) action).get()));
       } else if (action instanceof Consumer) {
         ((Consumer<T>) action).accept(this.outcome.get().data);
+      } else if (action instanceof Function) {
+        outcome.set(new Outcome<>(((Function<Object, T>) action).apply(outcome.get().data)));
       }
     }
     state.executingActions.set(false);
@@ -196,7 +239,7 @@ public class BasicCompletes<T> implements Completes<T>, Scheduled {
     }
   }
 
-  private class Outcome {
+  private class Outcome<T> {
     private T data;
 
     private Outcome(final T data) {
@@ -204,7 +247,7 @@ public class BasicCompletes<T> implements Completes<T>, Scheduled {
     }
   }
 
-  private class State {
+  private class State<T> {
     private Queue<Object> actions;
     private Cancellable cancellable;
     private final AtomicBoolean completed;

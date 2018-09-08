@@ -14,6 +14,8 @@ import org.junit.Test;
 
 import io.vlingo.actors.testkit.TestUntil;
 
+import java.util.function.Consumer;
+
 public class CompletesActorProtocolTest extends ActorsTest {
   private static final String Hello = "Hello, Completes!";
   private static final String HelloNot = "Bye!";
@@ -28,10 +30,10 @@ public class CompletesActorProtocolTest extends ActorsTest {
   public void testReturnsCompletes() {
     final UsesCompletes uc = world.actorFor(Definition.has(UsesCompletesActor.class, Definition.NoParameters), UsesCompletes.class);
 
-    uc.getHello().after((hello) -> setHello(hello.greeting));
+    uc.getHello().after((Consumer<CompletesActorProtocolTest.Hello>) (hello) -> setHello(hello.greeting));
     untilHello.completes();
     assertEquals(Hello, greeting);
-    uc.getOne().after((value) -> setValue(value));
+    uc.getOne().after((Consumer<Integer>) (value) -> setValue(value));
     untilOne.completes();
     assertEquals(1, value);
   }
@@ -42,7 +44,7 @@ public class CompletesActorProtocolTest extends ActorsTest {
 
     final Completes<Hello> helloCompletes = uc.getHello();
     helloCompletes.after(() -> new Hello(Prefix + helloCompletes.outcome().greeting))
-         .andThen((hello) -> setHello(hello.greeting));
+         .andThen((Consumer<CompletesActorProtocolTest.Hello>) (hello) -> setHello(hello.greeting));
 
     untilHello.completes();
     assertNotEquals(Hello, helloCompletes.outcome().greeting);
@@ -52,7 +54,7 @@ public class CompletesActorProtocolTest extends ActorsTest {
 
     final Completes<Integer> one = uc.getOne();
     one.after(() -> one.outcome() + 1)
-       .andThen((value) -> setValue(value));
+       .andThen((Consumer<Integer>) (value) -> setValue(value));
 
     untilOne.completes();
     assertNotEquals(new Integer(1), one.outcome());
@@ -65,11 +67,11 @@ public class CompletesActorProtocolTest extends ActorsTest {
   public void testThatTimeOutOccurs() {
     final UsesCompletes uc = world.actorFor(Definition.has(UsesCompletesCausesTimeoutActor.class, Definition.NoParameters), UsesCompletes.class);
 
-    final Completes<Hello> helloCompletes = uc.getHello().after((hello) -> setHello(hello.greeting), 2, new Hello(HelloNot));
+    final Completes<Hello> helloCompletes = uc.getHello().after((Consumer<CompletesActorProtocolTest.Hello>) (hello) -> setHello(hello.greeting), 2, new Hello(HelloNot));
     untilHello.completes();
     assertNotEquals(Hello, greeting);
     assertEquals(HelloNot, helloCompletes.outcome().greeting);
-    final Completes<Integer> oneCompletes = uc.getOne().after((value) -> setValue(value), 2, 0);
+    final Completes<Integer> oneCompletes = uc.getOne().after((Consumer<Integer>) (value) -> setValue(value), 2, 0);
     untilOne.completes();
     assertNotEquals(1, value);
     assertEquals(new Integer(0), oneCompletes.outcome());
